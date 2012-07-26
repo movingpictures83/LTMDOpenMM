@@ -3,49 +3,6 @@ cmake_minimum_required(VERSION 2.8)
 
 include_directories( "include" )
 
-# Profiling
-option( BUILD_PROFILE "Build Profiling code" Off )
-if( BUILD_PROFILE )
-	option( BUILD_PROFILE_INTEGRATOR "Build Integrator Profiling code" Off )
-	if( BUILD_PROFILE_INTEGRATOR )
-		add_definitions( "-DPROFILE_INTEGRATOR" )
-	endif( BUILD_PROFILE_INTEGRATOR )
-	
-	option( BUILD_PROFILE_ANALYSIS "Build Analysis Profiling code" Off )
-	if( BUILD_PROFILE_ANALYSIS )
-		add_definitions( "-DPROFILE_ANALYSIS" )
-	endif( BUILD_PROFILE_ANALYSIS )
-
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pg")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg")
-	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
-	set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -pg")
-	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pg")
-endif( BUILD_PROFILE )
-
-# Validation
-option( BUILD_VALIDATION "Build Validation Code" Off )
-if( BUILD_VALIDATION )
-	add_definitions( "-DVALIDATION" )
-endif( BUILD_VALIDATION )
-
-option( BUILD_KERNEL_VALIDATION "Build Kernel Validation Code" Off )
-if( BUILD_KERNEL_VALIDATION )
-	add_definitions( "-DKERNEL_VALIDATION" )
-	endif( BUILD_KERNEL_VALIDATION )
-
-# MKL
-option( BUILD_MKL "Build with Intel MKL code" Off )
-if( BUILD_MKL )
-	add_definitions( "-DINTEL_MKL" )
-
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mkl=parallel")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mkl=parallel")
-	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -mkl=parallel")
-	set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -mkl=parallel")
-	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -mkl=parallel")
-endif( BUILD_MKL )
-
 # OpenMP
 option( BUILD_OPENMP "Build with openmp support" Off )
 if( BUILD_OPENMP )
@@ -64,6 +21,15 @@ if( BUILD_OPENMP )
       endif( OPENMP_FOUND )
 		endif()
 endif( BUILD_OPENMP )
+
+# NMA
+set( NMA_DIR "$ENV{NMA_HOME}" CACHE PATH "NMA Install Directory")
+if( NMA_DIR )
+	link_directories( "${NMA_DIR}/lib/" )
+	include_directories( "${NMA_DIR}/include/" )
+endif()
+
+find_library( NMA_LIB "NMA-OpenMM" HINT ${NMA_DIR}/lib )
 
 # OpenMM
 set( OPENMM_DIR "$ENV{OPENMM_HOME}" CACHE PATH "OpenMM Install Directory")
@@ -91,12 +57,6 @@ endif()
 
 find_library( OPENMM_LIB "OpenMM" HINT ${OPENMM_DIR}/lib )
 
-# First Order
-option( BUILD_FIRST_ORDER "Build with first order perterb" Off )
-if( BUILD_FIRST_ORDER )
-	add_definitions( "-DFIRST_ORDER" )
-endif( BUILD_FIRST_ORDER )
-
 # LTMD Library
 file( GLOB LTMD_HEADERS include/LTMD/*.h )
 source_group( "include\\LTMD" FILES ${LTMD_HEADERS} )
@@ -105,7 +65,7 @@ file( GLOB LTMD_SOURCES src/LTMD/*.cpp )
 source_group( "src\\LTMD" FILES ${LTMD_SOURCES} )
 
 add_library( OpenMMLTMD SHARED ${LTMD_HEADERS} ${LTMD_SOURCES})
-target_link_libraries( OpenMMLTMD ${OPENMM_LIB} )
+target_link_libraries( OpenMMLTMD ${OPENMM_LIB} ${NMA_LIB} )
 
 # LTMD Reference Plugin
 file( GLOB LTMD_REFERENCE_HEADERS include/LTMD/Reference/*.h )

@@ -41,14 +41,14 @@
 #include "openmm/OpenMMException.h"
 #include "openmm/internal/ContextImpl.h"
 
-#include "LTMD/Analysis.h"
+#include "NMA/Analysis.h"
 #include "LTMD/Integrator.h"
 #include "LTMD/StepKernel.h"
 
 namespace OpenMM {
 	namespace LTMD {
-		Integrator::Integrator( double temperature, double frictionCoeff, double stepSize, const Parameters &params )
-			: stepsSinceDiagonalize( 0 ), mParameters( params ), maxEigenvalue( 4.34e5 ), mAnalysis( new Analysis ) {
+		Integrator::Integrator( double temperature, double frictionCoeff, double stepSize, const Parameters &params, const NMA::Parameters& nmaparam )
+            : stepsSinceDiagonalize( 0 ), mParameters( params ), maxEigenvalue( 4.34e5 ), mAnalysis( new NMA::Analysis( nmaparam ) ) {
 			setTemperature( temperature );
 			setFriction( frictionCoeff );
  			setStepSize( stepSize );
@@ -237,7 +237,7 @@ namespace OpenMM {
 			timeval start, end;
 			gettimeofday( &start, 0 );
 #endif
-			mAnalysis->computeEigenvectorsFull( *context, mParameters );
+			mAnalysis->computeEigenvectorsFull( *context );
 			setProjectionVectors( mAnalysis->getEigenvectors() );
 			stepsSinceDiagonalize = 0;
 #ifdef PROFILE_INTEGRATOR

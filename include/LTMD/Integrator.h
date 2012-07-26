@@ -38,6 +38,8 @@
 
 #include <iostream>
 
+#include "NMA/Analysis.h"
+#include "NMA/Parameters.h"
 #include "LTMD/Parameters.h"
 
 namespace OpenMM {
@@ -53,7 +55,7 @@ namespace OpenMM {
 				 * @param frictionCoeff  the friction coefficient which couples the system to the heat bath
 				 * @param stepSize       the step size with which to integrator the system (in picoseconds)
 				 */
-				Integrator( const double temperature, const double frictionCoeff, const double stepSize, const Parameters &param );
+                Integrator( const double temperature, const double frictionCoeff, const double stepSize, const Parameters &param, const NMA::Parameters &nmaparam  );
 
 				~Integrator();
 
@@ -175,7 +177,7 @@ namespace OpenMM {
 				OpenMM::ContextImpl *context;
 				OpenMM::Kernel kernel;
 				const Parameters &mParameters;
-				Analysis *mAnalysis;
+                NMA::Analysis *mAnalysis;
 		};
 	}
 }

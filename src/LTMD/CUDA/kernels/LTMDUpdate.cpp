@@ -40,31 +40,36 @@
 using namespace std;
 using namespace OpenMM;
 
+#ifdef USE_MIXED_PRECISION
+typedef double mixed;
+#else
+typedef float mixed;
+#endif
 
 // CPU code
-void kNMLUpdate(CUmodule* module, CudaContext* cu, float deltaT, float tau, float kT, int numModes, int& iterations, CudaArray& modes, CudaArray& modeWeights, CudaArray& noiseVal, CudaArray& randomIndex ) {
+void kNMLUpdate(CUmodule* module, CudaContext* cu, mixed deltaT, mixed tau, mixed kT, int numModes, int& iterations, CudaArray& modes, CudaArray& modeWeights, CudaArray& noiseVal, CudaArray& randomIndex ) {
+
 	int atoms = cu->getNumAtoms();
 	int paddednumatoms = cu->getPaddedNumAtoms();
 	int numrand = cu->getIntegrationUtilities().getRandom().getSize();
 
 	void* update1Args[] = {&atoms, &paddednumatoms, &tau, &deltaT, &kT, 
-                            &cu->getPosq().getDevicePointer(), &noiseVal.getDevicePointer(), &cu->getVelm().getDevicePointer(), &cu->getForce().getDevicePointer(), &cu->getIntegrationUtilities().getRandom().getDevicePointer(), &randomIndex.getDevicePointer(), &numrand }; // # of random numbers equal to the number of atoms? TMC
+                            &cu->getVelm().getDevicePointer(), &cu->getForce().getDevicePointer(), &cu->getIntegrationUtilities().getRandom().getDevicePointer(), &randomIndex.getDevicePointer(), &numrand }; // # of random numbers equal to the number of atoms? TMC
 	CUfunction update1Kernel, update2Kernel, update3Kernel;
         update1Kernel = cu->getKernel(*module, "kNMLUpdate1_kernel");
 	cu->executeKernel(update1Kernel, update1Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize);
 
         void* update2Args[] = {&atoms, &numModes, &cu->getVelm().getDevicePointer(), &modes.getDevicePointer(), &modeWeights.getDevicePointer()};
 	update2Kernel = cu->getKernel(*module, "kNMLUpdate2_kernel");
-	cu->executeKernel(update2Kernel, update2Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, cu->ThreadBlockSize*sizeof(float)); 
-	
-        void* update3Args[] = {&atoms, &numModes, &deltaT, &cu->getPosq().getDevicePointer(), &cu->getVelm().getDevicePointer(), &modes.getDevicePointer(), &modeWeights.getDevicePointer(), &noiseVal.getDevicePointer()};
-	update3Kernel = cu->getKernel(*module, "kNMLUpdate3_kernel");
-	cu->executeKernel(update3Kernel, update3Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, numModes*sizeof(float)); 
+	cu->executeKernel(update2Kernel, update2Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, cu->ThreadBlockSize*sizeof(mixed)); 
 
+        void* update3Args[] = {&atoms, &numModes, &deltaT, &cu->getPosq().getDevicePointer(), &cu->getPosqCorrection().getDevicePointer(), &cu->getVelm().getDevicePointer(), &modes.getDevicePointer(), &modeWeights.getDevicePointer(), &noiseVal.getDevicePointer()};
+	update3Kernel = cu->getKernel(*module, "kNMLUpdate3_kernel");
+	cu->executeKernel(update3Kernel, update3Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, numModes*sizeof(mixed)); 
 }
 
 #ifdef FAST_NOISE
-void kFastNoise(CUmodule* module, CudaContext* cu, int numModes, float kT, int& iterations, CudaArray& modes, CudaArray& modeWeights, float maxEigenvalue, CudaArray& noiseVal, CudaArray& randomIndex, CudaArray& oldpos, float stepSize ) {
+void kFastNoise(CUmodule* module, CudaContext* cu, int numModes, mixed kT, int& iterations, CudaArray& modes, CudaArray& modeWeights, mixed maxEigenvalue, CudaArray& noiseVal, CudaArray& randomIndex, CudaArray& oldpos, mixed stepSize ) {
 	int atoms = cu->getNumAtoms();
 	int paddednumatoms = cu->getPaddedNumAtoms();
 	int numrand = cu->getIntegrationUtilities().getRandom().getSize();
@@ -73,58 +78,58 @@ void kFastNoise(CUmodule* module, CudaContext* cu, int numModes, float kT, int& 
 	
 	
 	fastnoise1Kernel = cu->getKernel(*module, "kFastNoise1_kernel");
-	cu->executeKernel(fastnoise1Kernel, fastnoise1Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, cu->ThreadBlockSize*sizeof(float));
+	cu->executeKernel(fastnoise1Kernel, fastnoise1Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, cu->ThreadBlockSize*sizeof(mixed));
 
-        void* fastnoise2Args[] = {&atoms, &numModes, &cu->getPosq().getDevicePointer(), &noiseVal.getDevicePointer(), &cu->getVelm().getDevicePointer(), &modes.getDevicePointer(), &modeWeights.getDevicePointer()};
+        void* fastnoise2Args[] = {&atoms, &numModes, &cu->getPosq().getDevicePointer(), &cu->getPosqCorrection().getDevicePointer(), &noiseVal.getDevicePointer(), &cu->getVelm().getDevicePointer(), &modes.getDevicePointer(), &modeWeights.getDevicePointer()};
 
         fastnoise2Kernel = cu->getKernel(*module, "kFastNoise2_kernel");
-	cu->executeKernel(fastnoise2Kernel, fastnoise2Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, numModes*sizeof(float));
+	cu->executeKernel(fastnoise2Kernel, fastnoise2Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, numModes*sizeof(mixed));
 }
 #endif 
 
-void kNMLRejectMinimizationStep(CUmodule* module, CudaContext* cu, CudaArray& oldpos ) {
+void kNMLRejectMinimizationStep(CUmodule* module, CudaContext* cu, CudaArray& oldpos, CudaArray& oldposCorrection ) {
 	CUfunction rejectKernel = cu->getKernel(*module, "kRejectMinimizationStep_kernel");
 	int atoms = cu->getNumAtoms();
-	void* rejectArgs[] = {&atoms, &cu->getPosq().getDevicePointer(), &oldpos.getDevicePointer() };
+	void* rejectArgs[] = {&atoms, &cu->getPosq().getDevicePointer(), &cu->getPosqCorrection().getDevicePointer(), &oldpos.getDevicePointer(), &oldposCorrection.getDevicePointer() };
 	cu->executeKernel(rejectKernel, rejectArgs, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize);
 }
 
-void kNMLAcceptMinimizationStep(CUmodule* module, CudaContext* cu, CudaArray& oldpos ) {
+void kNMLAcceptMinimizationStep(CUmodule* module, CudaContext* cu, CudaArray& oldpos, CudaArray& oldposCorrection ) {
 	CUfunction acceptKernel = cu->getKernel(*module, "kAcceptMinimizationStep_kernel");
 	int atoms = cu->getNumAtoms();
-	void* acceptArgs[] = {&atoms, &cu->getPosq().getDevicePointer(), &oldpos.getDevicePointer() };
+	void* acceptArgs[] = {&atoms, &cu->getPosq().getDevicePointer(), &cu->getPosqCorrection().getDevicePointer(), &oldpos.getDevicePointer(), &oldposCorrection.getDevicePointer() };
 	cu->executeKernel(acceptKernel, acceptArgs, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize);
 }
 
-void kNMLLinearMinimize(CUmodule* module, CudaContext* cu, int numModes, float maxEigenvalue, CudaArray& oldpos, CudaArray& modes, CudaArray& modeWeights ) {
+void kNMLLinearMinimize(CUmodule* module, CudaContext* cu, int numModes, mixed maxEigenvalue, CudaArray& oldpos, CudaArray& oldposCorrection, CudaArray& modes, CudaArray& modeWeights ) {
 	int atoms = cu->getNumAtoms();
 	int paddedatoms = cu->getPaddedNumAtoms();
 	void* linmin1Args[] = {&atoms, &paddedatoms, &numModes, &cu->getVelm().getDevicePointer(), &cu->getForce().getDevicePointer(), &modes.getDevicePointer(), &modeWeights.getDevicePointer()};
 	CUfunction linmin1Kernel, linmin2Kernel;
         linmin1Kernel = cu->getKernel(*module, "kNMLLinearMinimize1_kernel");
-	cu->executeKernel(linmin1Kernel, linmin1Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, cu->ThreadBlockSize*sizeof(float));
+	cu->executeKernel(linmin1Kernel, linmin1Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, cu->ThreadBlockSize*sizeof(mixed));
 	linmin2Kernel = cu->getKernel(*module, "kNMLLinearMinimize2_kernel");
-	float oneoverEig = 1.0f/maxEigenvalue;
-	void* linmin2Args[] = {&atoms, &paddedatoms, &numModes, &oneoverEig, &cu->getPosq().getDevicePointer(), &oldpos.getDevicePointer(), &cu->getVelm().getDevicePointer(), &cu->getForce().getDevicePointer(), &modes.getDevicePointer(), &modeWeights.getDevicePointer()}; 
-        cu->executeKernel(linmin2Kernel, linmin2Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, numModes*sizeof(float));
+	mixed oneoverEig = (mixed) 1.0f/maxEigenvalue;
+	void* linmin2Args[] = {&atoms, &paddedatoms, &numModes, &oneoverEig, &cu->getPosq().getDevicePointer(), &cu->getPosqCorrection().getDevicePointer(), &oldpos.getDevicePointer(), &oldposCorrection.getDevicePointer(), &cu->getVelm().getDevicePointer(), &cu->getForce().getDevicePointer(), &modes.getDevicePointer(), &modeWeights.getDevicePointer()};
+        cu->executeKernel(linmin2Kernel, linmin2Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, numModes*sizeof(mixed));
 }
 
 
-void kNMLQuadraticMinimize(CUmodule* module, CudaContext* cu, float maxEigenvalue, float currentPE, float lastPE, CudaArray& oldpos, CudaArray& slopeBuffer, CudaArray& lambdaval ) {
+void kNMLQuadraticMinimize(CUmodule* module, CudaContext* cu, mixed maxEigenvalue, mixed currentPE, mixed lastPE, CudaArray& oldpos, CudaArray& oldposCorrection, CudaArray& slopeBuffer, CudaArray& lambdaval ) {
 	int atoms = cu->getNumAtoms();
 	int paddedatoms = cu->getPaddedNumAtoms();
 	void* quadmin1Args[] = {&atoms, &paddedatoms, 
 				&oldpos.getDevicePointer(), 
+				&oldposCorrection.getDevicePointer(),
 				&cu->getVelm().getDevicePointer(), 
 				&cu->getForce().getDevicePointer(), 
 				&slopeBuffer.getDevicePointer()};
 	CUfunction quadmin1Kernel, quadmin2Kernel;
         quadmin1Kernel = cu->getKernel(*module, "kNMLQuadraticMinimize1_kernel");
-	cu->executeKernel(quadmin1Kernel, quadmin1Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, cu->ThreadBlockSize*sizeof(float)); 
-
-	float oneoverEig = 1.0f/maxEigenvalue;
-	void* quadmin2Args[] = {&atoms, &currentPE, &lastPE, &oneoverEig, &cu->getPosq().getDevicePointer(), &oldpos.getDevicePointer(), &cu->getVelm().getDevicePointer(), &slopeBuffer.getDevicePointer(), &lambdaval.getDevicePointer()}; 
+	cu->executeKernel(quadmin1Kernel, quadmin1Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, cu->ThreadBlockSize*sizeof(mixed));
+	mixed oneoverEig = (mixed)1.0f/maxEigenvalue;
+	void* quadmin2Args[] = {&atoms, &currentPE, &lastPE, &oneoverEig, &cu->getPosq().getDevicePointer(), &cu->getPosqCorrection().getDevicePointer(), &oldpos.getDevicePointer(), &oldposCorrection.getDevicePointer(), &cu->getVelm().getDevicePointer(), &slopeBuffer.getDevicePointer(), &lambdaval.getDevicePointer()}; 
         quadmin2Kernel = cu->getKernel(*module, "kNMLQuadraticMinimize2_kernel");
-        cu->executeKernel(quadmin2Kernel, quadmin2Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, cu->getNumThreadBlocks()*cu->ThreadBlockSize*sizeof(float)); 
+        cu->executeKernel(quadmin2Kernel, quadmin2Args, cu->getNumThreadBlocks()*cu->ThreadBlockSize, cu->ThreadBlockSize, cu->getNumThreadBlocks()*cu->ThreadBlockSize*sizeof(mixed)); 
 	
 }

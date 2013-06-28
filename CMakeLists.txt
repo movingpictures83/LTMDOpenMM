@@ -145,6 +145,11 @@ if( BUILD_GPU )
 		add_definitions( "-DFAST_NOISE" )
 	endif( BUILD_FAST_NOISE )
 
+	option( BUILD_MIXED "Build Mixed Precision" On )
+	if( BUILD_MIXED )
+		add_definitions( "-DUSE_MIXED_PRECISION" )
+	endif( BUILD_MIXED )
+
 	option( BUILD_GPU_CUDA "Build Cuda GPU code" Off )
 	if( BUILD_GPU_CUDA )
 		find_package( CUDA REQUIRED )

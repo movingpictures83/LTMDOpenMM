@@ -35,11 +35,17 @@
 #include "CudaContext.h"
 #include "CudaIntegrationUtilities.h"
 
-static const float KILO                     =    1e3;                      // Thousand
-static const float BOLTZMANN                =    1.380658e-23f;            // (J/K)
-static const float AVOGADRO                 =    6.0221367e23f;            // ()
-static const float RGAS                     =    BOLTZMANN * AVOGADRO;     // (J/(mol K))
-static const float BOLTZ                    = ( RGAS / KILO );             // (kJ/(mol K))
+#ifdef USE_MIXED_PRECISION
+typedef double mixed;
+#else
+typedef float mixed;
+#endif
+
+static const mixed KILO                     =    1e3;                      // Thousand
+static const mixed BOLTZMANN                =    1.380658e-23f;            // (J/K)
+static const mixed AVOGADRO                 =    6.0221367e23f;            // ()
+static const mixed RGAS                     =    BOLTZMANN * AVOGADRO;     // (J/(mol K))
+static const mixed BOLTZ                    = ( RGAS / KILO );             // (kJ/(mol K))
 
 namespace OpenMM {
 	namespace LTMD {
@@ -85,10 +91,8 @@ virtual double computeKineticEnergy(OpenMM::ContextImpl& context, const Integrat
 					CudaArray* MinimizeLambda;
 					CudaArray* oldpos;
 					CudaArray* pPosqP;
-					//CUDAStream<float4> *modes, *NoiseValues;
-					//CUDAStream<float>* modeWeights;
-					//CUDAStream<float>* minimizerScale;
-					//CUDAStream<float>* MinimizeLambda;
+					CudaArray* oldposCorrection;
+					CudaArray* pPosqPCorrection;
 					double lastPE;
 					double prevTemp, prevFriction, prevStepSize;
 					int iterations;

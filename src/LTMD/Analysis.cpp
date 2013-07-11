@@ -682,7 +682,7 @@ namespace OpenMM {
                 if( params.BlockDiagonalizePlatform == 1 ){
                     platform.setPropertyDefaultValue("OpenCLDeviceIndex", stream.str() );
                 }else{
-                    platform.setPropertyDefaultValue("CudaDevice", stream.str() );
+                    platform.setPropertyDefaultValue("CudaDeviceIndex", stream.str() );
                 }
             }
 
